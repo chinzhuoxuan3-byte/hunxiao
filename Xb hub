@@ -1,0 +1,1304 @@
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+local Toggles = Library.Toggles
+local Options  = Library.Options
+
+local Window = Library:CreateWindow({
+    Title = "Xb Hub",
+    Footer = "v2.5 Mobile",
+    Icon = 132576466639593,
+    NotifySide = "Right",
+    ShowCustomCursor = false,
+})
+
+local Tabs = {
+    Main   = Window:AddTab("主要功能", "home"),
+    Player = Window:AddTab("玩家功能", "user"),
+    Combat = Window:AddTab("战斗功能", "swords"),
+    World  = Window:AddTab("世界功能", "globe"),
+    ESP    = Window:AddTab("透视功能", "eye"),
+    Misc   = Window:AddTab("杂项功能", "star"),
+    UI     = Window:AddTab("UI 设置",  "settings"),
+}
+
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui       = game:GetService("StarterGui")
+local Stats            = game:GetService("Stats")
+local Lighting         = game:GetService("Lighting")
+local Workspace        = game:GetService("Workspace")
+local CoreGui          = game:GetService("CoreGui")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+local aimbotEnabledST = false
+local teamCheckEnabledST = false
+local wallCheckEnabledST = false
+local friendCheckEnabledST = false
+local showTargetEnabledST = false
+local ragdollCheckEnabledST = false
+local forceFieldCheckEnabledST = false 
+local fovEnabledST = false
+local fovRadiusST = 150
+local hitChanceST = 100
+local targetPartNameST = "Head" 
+
+local useBlacklistST = false
+local useWhitelistST = false
+local blacklistDataST = {} 
+local whitelistDataST = {} 
+
+local currentTargetInstanceST = nil
+
+local TargetHighlightST = Instance.new("Highlight")
+TargetHighlightST.Name = "AimTargetHighlightST"
+TargetHighlightST.FillColor = Color3.fromRGB(255, 0, 0)
+TargetHighlightST.OutlineColor = Color3.fromRGB(255, 255, 255)
+TargetHighlightST.FillTransparency = 0.5
+TargetHighlightST.OutlineTransparency = 0
+TargetHighlightST.Enabled = false
+TargetHighlightST.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+TargetHighlightST.Parent = CoreGui
+
+local FovCircleST = Drawing.new("Circle")
+FovCircleST.Visible = false
+FovCircleST.Thickness = 1
+FovCircleST.Color = Color3.fromRGB(255, 255, 255)
+FovCircleST.Transparency = 1
+FovCircleST.NumSides = 60
+FovCircleST.Radius = fovRadiusST
+FovCircleST.Filled = false
+
+local function GetLocalTeam()
+    if LocalPlayer.Team then return LocalPlayer.Team end
+    return nil
+end
+
+local function CheckVisibility(targetPart)
+    local origin = Camera.CFrame.Position
+    local direction = (targetPart.Position - origin)
+    local ignoreList = {LocalPlayer.Character, Camera}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character then
+            table.insert(ignoreList, player.Character)
+        end
+    end
+    local hitPart = Workspace:FindPartOnRayWithIgnoreList(Ray.new(origin, direction), ignoreList)
+    if hitPart and not hitPart:IsDescendantOf(targetPart.Parent) then
+        return false
+    end
+    return true
+end
+
+local function IsRagdoll(character)
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if hum.PlatformStand or hum:GetState() == Enum.HumanoidStateType.Physics then
+            return true
+        end
+    end
+    return false
+end
+
+local function HasForceField(character)
+    if character:FindFirstChildOfClass("ForceField") then
+        return true
+    end
+    return false
+end
+
+local function GetTargetPart(character)
+    if targetPartNameST == "RandomTorso/Head" then
+        if math.random() > 0.5 then
+            return character:FindFirstChild("Head")
+        else
+            return character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart")
+        end
+    elseif targetPartNameST == "Torso" then
+        return character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart")
+    else
+        return character:FindFirstChild(targetPartNameST)
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    local viewportSize = Camera.ViewportSize
+    local centerPos = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+
+    if fovEnabledST then
+        FovCircleST.Position = centerPos
+        FovCircleST.Radius = fovRadiusST
+        FovCircleST.Visible = true
+    else
+        FovCircleST.Visible = false
+    end
+
+    if not aimbotEnabledST then 
+        currentTargetInstanceST = nil
+        if TargetHighlightST.Enabled then TargetHighlightST.Enabled = false end
+        if TargetHighlightST.Adornee then TargetHighlightST.Adornee = nil end
+        return 
+    end
+
+    local closestDistance = math.huge
+    local tempTarget = nil
+    local localTeam = GetLocalTeam()
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            
+            if useBlacklistST and blacklistDataST[player.Name] then continue end
+            if useWhitelistST and not whitelistDataST[player.Name] then continue end
+
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if not humanoid or humanoid.Health <= 0 then continue end
+            
+            if ragdollCheckEnabledST and IsRagdoll(player.Character) then continue end
+            if forceFieldCheckEnabledST and HasForceField(player.Character) then continue end
+            
+            if teamCheckEnabledST and localTeam then
+                 if player.Team == localTeam then continue end
+            end
+
+            if friendCheckEnabledST and player:IsFriendsWith(LocalPlayer.UserId) then continue end
+
+            local targetPart = GetTargetPart(player.Character)
+            
+            if targetPart then
+                if wallCheckEnabledST and not CheckVisibility(targetPart) then continue end
+                
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen or (screenPos.Z > 0) then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
+                    
+                    if fovEnabledST and dist > fovRadiusST then
+                        continue
+                    end
+                    
+                    if dist < closestDistance then
+                        closestDistance = dist
+                        tempTarget = targetPart
+                    end
+                end
+            end
+        end
+    end
+    
+    currentTargetInstanceST = tempTarget
+
+    if showTargetEnabledST then
+        if currentTargetInstanceST then
+            local targetCharacter = currentTargetInstanceST.Parent
+            
+            if TargetHighlightST.Adornee ~= targetCharacter then
+                TargetHighlightST.Adornee = targetCharacter
+            end
+            
+            if not TargetHighlightST.Enabled then
+                TargetHighlightST.Enabled = true
+            end
+        else
+            if TargetHighlightST.Enabled then
+                TargetHighlightST.Enabled = false
+            end
+            if TargetHighlightST.Adornee then
+                TargetHighlightST.Adornee = nil
+            end
+        end
+    else
+        if TargetHighlightST.Enabled then
+            TargetHighlightST.Enabled = false
+        end
+    end
+end)
+
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if method == "Raycast" and self == Workspace and aimbotEnabledST and currentTargetInstanceST then
+        if math.random(1, 100) <= hitChanceST then
+            local origin = args[1]
+            local targetPos = currentTargetInstanceST.Position
+            
+            if wallCheckEnabledST then
+                if not CheckVisibility(currentTargetInstanceST) then
+                     return oldNamecall(self, ...)
+                end
+            end
+            
+            local direction = (targetPos - origin)
+            
+            return {
+                Position = targetPos,
+                Distance = direction.Magnitude,
+                Instance = currentTargetInstanceST,
+                Normal = Vector3.new(0, 1, 0),
+                Material = Enum.Material.Plastic
+            }
+        end
+    end
+    
+    return oldNamecall(self, ...)
+end)
+
+setreadonly(mt, true)
+
+local aimbotEnabled = false
+local teamCheckEnabled = false
+local wallCheckEnabled = false
+local friendCheckEnabled = false
+local showTargetEnabled = false
+local ragdollCheckEnabled = false
+local forceFieldCheckEnabled = false 
+local fovEnabled = false
+local fovRadius = 150
+local targetPartName = "Head" 
+
+local aimSmoothness = 0.8
+local aimPrediction = 0.0
+local aimAlwaysOn = false          
+local aimKeybind = nil
+local lastTargetPos = nil
+local lastTargetTime = nil
+local targetVelocity = Vector3.new(0,0,0)
+
+local aimTargetInstance = nil
+
+local AimTargetHighlight = Instance.new("Highlight")
+AimTargetHighlight.Name = "AimTargetHighlight"
+AimTargetHighlight.FillColor = Color3.fromRGB(255, 0, 0)
+AimTargetHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+AimTargetHighlight.FillTransparency = 0.5
+AimTargetHighlight.OutlineTransparency = 0
+AimTargetHighlight.Enabled = false
+AimTargetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+AimTargetHighlight.Parent = CoreGui
+
+local AimFovCircle = Drawing.new("Circle")
+AimFovCircle.Visible = false
+AimFovCircle.Thickness = 1
+AimFovCircle.Color = Color3.fromRGB(255, 255, 255)
+AimFovCircle.Transparency = 1
+AimFovCircle.NumSides = 60
+AimFovCircle.Radius = fovRadius
+AimFovCircle.Filled = false
+
+local function UpdateTargetVelocity(currentTarget)
+    if not currentTarget then
+        lastTargetPos = nil
+        lastTargetTime = nil
+        targetVelocity = Vector3.new(0,0,0)
+        return
+    end
+    
+    local now = tick()
+    local currentPos = currentTarget.Position
+    
+    if lastTargetPos and lastTargetTime then
+        local dt = now - lastTargetTime
+        if dt > 0 then
+            targetVelocity = (currentPos - lastTargetPos) / dt
+        end
+    else
+        targetVelocity = Vector3.new(0,0,0)
+    end
+    
+    lastTargetPos = currentPos
+    lastTargetTime = now
+end
+
+RunService.Heartbeat:Connect(function()
+    local viewportSize = Camera.ViewportSize
+    local centerPos = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+
+    if fovEnabled then
+        AimFovCircle.Position = centerPos
+        AimFovCircle.Radius = fovRadius
+        AimFovCircle.Visible = true
+    else
+        AimFovCircle.Visible = false
+    end
+
+    if not aimbotEnabled then 
+        aimTargetInstance = nil
+        if AimTargetHighlight.Enabled then AimTargetHighlight.Enabled = false end
+        if AimTargetHighlight.Adornee then AimTargetHighlight.Adornee = nil end
+        return 
+    end
+
+    local closestDistance = math.huge
+    local tempTarget = nil
+    local localTeam = GetLocalTeam()
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            
+            if useBlacklistST and blacklistDataST[player.Name] then continue end
+            if useWhitelistST and not whitelistDataST[player.Name] then continue end
+
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if not humanoid or humanoid.Health <= 0 then continue end
+            
+            if ragdollCheckEnabled and IsRagdoll(player.Character) then continue end
+            if forceFieldCheckEnabled and HasForceField(player.Character) then continue end
+            
+            if teamCheckEnabled and localTeam then
+                 if player.Team == localTeam then continue end
+            end
+
+            if friendCheckEnabled and player:IsFriendsWith(LocalPlayer.UserId) then continue end
+
+            local targetPart = GetTargetPart(player.Character)
+            
+            if targetPart then
+                if wallCheckEnabled and not CheckVisibility(targetPart) then continue end
+                
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen or (screenPos.Z > 0) then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
+                    
+                    if fovEnabled and dist > fovRadius then
+                        continue
+                    end
+                    
+                    if dist < closestDistance then
+                        closestDistance = dist
+                        tempTarget = targetPart
+                    end
+                end
+            end
+        end
+    end
+    
+    aimTargetInstance = tempTarget
+
+    if aimbotEnabled and aimTargetInstance then
+        local shouldAim = aimAlwaysOn
+        if not shouldAim and aimKeybind then
+            shouldAim = aimKeybind:GetState()
+        end
+        
+        if shouldAim then
+            UpdateTargetVelocity(aimTargetInstance)
+            
+            local targetPos = aimTargetInstance.Position
+            if aimPrediction > 0 then
+                targetPos = targetPos + targetVelocity * aimPrediction
+            end
+            
+            local cameraCF = Camera.CFrame
+            local targetCF = CFrame.lookAt(cameraCF.Position, targetPos)
+            
+            if aimSmoothness < 1 then
+                targetCF = cameraCF:Lerp(targetCF, aimSmoothness)
+            end
+            
+            Camera.CFrame = targetCF
+        else
+            lastTargetPos = nil
+            lastTargetTime = nil
+        end
+    else
+        lastTargetPos = nil
+        lastTargetTime = nil
+    end
+
+    if showTargetEnabled then
+        if aimTargetInstance then
+            local targetCharacter = aimTargetInstance.Parent
+            
+            if AimTargetHighlight.Adornee ~= targetCharacter then
+                AimTargetHighlight.Adornee = targetCharacter
+            end
+            
+            if not AimTargetHighlight.Enabled then
+                AimTargetHighlight.Enabled = true
+            end
+        else
+            if AimTargetHighlight.Enabled then
+                AimTargetHighlight.Enabled = false
+            end
+            if AimTargetHighlight.Adornee then
+                AimTargetHighlight.Adornee = nil
+            end
+        end
+    else
+        if AimTargetHighlight.Enabled then
+            AimTargetHighlight.Enabled = false
+        end
+    end
+end)
+
+local function Char()  return LocalPlayer.Character end
+local function Root()  local c = Char() return c and c:FindFirstChild("HumanoidRootPart") end
+local function Hum()   local c = Char() return c and c:FindFirstChildOfClass("Humanoid") end
+local function T(k)    return Toggles[k] and Toggles[k].Value end
+local function O(k)    return Options[k]  and Options[k].Value end
+local function Notify(t, d, n) pcall(function() Library:Notify({Title=t,Description=d,Duration=n or 3}) end) end
+
+local function SendChat(msg)
+    local ok = false
+    pcall(function()
+        local rs = game:GetService("ReplicatedStorage")
+        local DefaultChat = rs:FindFirstChild("DefaultChatSystemChatEvents")
+        if DefaultChat then
+            local SayMsg = DefaultChat:FindFirstChild("SayMessageRequest")
+            if SayMsg then
+                SayMsg:FireServer(msg, "All")
+                ok = true
+            end
+        end
+    end)
+    if not ok then
+        pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("DefaultChatSystemChatEvents",1)
+                :WaitForChild("SayMessageRequest",1):FireServer(msg,"All")
+            ok = true
+        end)
+    end
+    if not ok then
+        pcall(function()
+            local ChatService = game:GetService("Chat")
+            ChatService:Chat(LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head"), msg)
+            ok = true
+        end)
+    end
+    if not ok then
+        pcall(function() LocalPlayer:Chat(msg) end)
+    end
+    return ok
+end
+
+local InfoGroup = Tabs.Main:AddLeftGroupbox("玩家讯息", "info")
+local LbFPS  = InfoGroup:AddLabel("帧率: --")
+local LbPing = InfoGroup:AddLabel("延迟: --")
+local LbPos  = InfoGroup:AddLabel("坐标: --")
+local LbTime = InfoGroup:AddLabel("时间: --")
+InfoGroup:AddLabel("用户: " .. LocalPlayer.Name)
+InfoGroup:AddLabel("执行器: " .. (identifyexecutor and identifyexecutor() or "未知"))
+InfoGroup:AddLabel("游戏ID: " .. tostring(game.PlaceId))
+
+local QuickGroup = Tabs.Main:AddRightGroupbox("快速操作", "zap")
+QuickGroup:AddButton("重置角色", function()
+    local h = Hum() if h then h.Health = 0 end
+end)
+QuickGroup:AddButton("复制坐标", function()
+    local r = Root()
+    if r and setclipboard then
+        local p = r.Position
+        setclipboard(("Vector3.new(%.2f,%.2f,%.2f)"):format(p.X,p.Y,p.Z))
+        Notify("已复制","坐标已复制到剪贴板")
+    end
+end)
+QuickGroup:AddButton("清除贴花", function()
+    local n = 0
+    for _,v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Decal") or v:IsA("Texture") then
+            pcall(function() v:Destroy() n=n+1 end)
+        end
+    end
+    Notify("清理","已删除 "..n.." 个贴花")
+end)
+QuickGroup:AddButton("强制刷新角色", function()
+    LocalPlayer:LoadCharacter()
+end)
+QuickGroup:AddButton("复制游戏ID", function()
+    if setclipboard then
+        setclipboard(tostring(game.PlaceId))
+        Notify("已复制","游戏ID: "..tostring(game.PlaceId))
+    end
+end)
+
+local MoveGroup = Tabs.Player:AddLeftGroupbox("移动设置","move")
+MoveGroup:AddToggle("WalkOn",  {Text="启用速度修改", Default=false})
+MoveGroup:AddSlider("WalkVal", {Text="移动速度", Default=16, Min=1, Max=500, Rounding=0})
+MoveGroup:AddToggle("JumpOn",  {Text="启用跳跃修改", Default=false})
+MoveGroup:AddSlider("JumpVal", {Text="跳跃力度", Default=50, Min=1, Max=500, Rounding=0})
+MoveGroup:AddToggle("InfJump", {Text="无限跳跃", Default=false})
+MoveGroup:AddToggle("NoClip",  {Text="穿墙 NoClip", Default=false})
+MoveGroup:AddToggle("GodMode", {Text="无敌模式", Default=false})
+
+UserInputService.JumpRequest:Connect(function()
+    if T("InfJump") then
+        local h = Hum()
+        if h then pcall(function() h:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if T("NoClip") then
+        local c = Char()
+        if c then
+            for _,p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end
+    end
+end)
+
+local FlyGroup = Tabs.Player:AddRightGroupbox("飞行设置","wind")
+FlyGroup:AddButton("飞行", function()
+    Notify("飞行","正在加载飞行脚本...",3)
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/chinzhuoxuan3-byte/lag/refs/heads/main/Xbflygui"))()
+    end)
+end)
+FlyGroup:AddToggle("AntiG", {Text="反重力漂浮", Default=false})
+
+RunService.RenderStepped:Connect(function()
+    local r = Root()
+    if not r then return end
+    if T("AntiG") then
+        local f = r:FindFirstChild("XbAG") or Instance.new("BodyForce")
+        f.Name = "XbAG"
+        f.Force = Vector3.new(0, workspace.Gravity * r:GetMass(), 0)
+        f.Parent = r
+    else
+        local f = r:FindFirstChild("XbAG")
+        if f then f:Destroy() end
+    end
+end)
+
+local TpGroup = Tabs.Player:AddLeftGroupbox("传送功能","map-pin")
+TpGroup:AddButton("传送到随机玩家", function()
+    local list = {}
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            list[#list+1] = p
+        end
+    end
+    if #list == 0 then Notify("传送","没有其他玩家") return end
+    local t = list[math.random(1,#list)]
+    local r = Root()
+    if r then
+        r.CFrame = t.Character.HumanoidRootPart.CFrame + Vector3.new(3,0,0)
+        Notify("传送","→ "..t.Name)
+    end
+end)
+TpGroup:AddButton("传送到出生点", function()
+    local r = Root()
+    local s = workspace:FindFirstChildOfClass("SpawnLocation")
+    if r and s then
+        r.CFrame = s.CFrame + Vector3.new(0,3,0)
+        Notify("传送","已到出生点")
+    end
+end)
+TpGroup:AddInput("TpX",{Text="X坐标",Default="0",Numeric=true})
+TpGroup:AddInput("TpY",{Text="Y坐标",Default="0",Numeric=true})
+TpGroup:AddInput("TpZ",{Text="Z坐标",Default="0",Numeric=true})
+TpGroup:AddButton("传送到输入坐标", function()
+    local x = tonumber(O("TpX")) or 0
+    local y = tonumber(O("TpY")) or 0
+    local z = tonumber(O("TpZ")) or 0
+    local r = Root()
+    if r then
+        r.CFrame = CFrame.new(x,y,z)
+        Notify("传送",("%.0f, %.0f, %.0f"):format(x,y,z))
+    end
+end)
+
+local TpPlayerGroup = Tabs.Player:AddRightGroupbox("传送到玩家","users")
+local playerNames = {"-- 请选择 --"}
+for _,p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then playerNames[#playerNames+1] = p.Name end
+end
+TpPlayerGroup:AddDropdown("TpTarget",{Text="选择玩家", Values=playerNames, Default="-- 请选择 --"})
+TpPlayerGroup:AddButton("传送过去", function()
+    local name = O("TpTarget")
+    if not name or name == "-- 请选择 --" then Notify("传送","请先选择玩家") return end
+    local target = Players:FindFirstChild(name)
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local r = Root()
+        if r then
+            r.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(3,0,0)
+            Notify("传送","→ "..name)
+        end
+    else
+        Notify("传送","找不到该玩家")
+    end
+end)
+TpPlayerGroup:AddButton("把玩家传送到我这", function()
+    local name = O("TpTarget")
+    if not name or name == "-- 请选择 --" then Notify("传送","请先选择玩家") return end
+    local target = Players:FindFirstChild(name)
+    local myR = Root()
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and myR then
+        target.Character.HumanoidRootPart.CFrame = myR.CFrame + Vector3.new(3,0,0)
+        Notify("传送",name.." 已被传送到你身边")
+    end
+end)
+
+local NewAimGroup = Tabs.Combat:AddLeftGroupbox("自瞄设置(相机锁定)","crosshair")
+NewAimGroup:AddToggle("NewAimbot", {
+    Text = "自瞄 (Aimbot)",
+    Default = false,
+    Callback = function(Value)
+        aimbotEnabled = Value
+    end
+})
+
+local aimKeyLabel = NewAimGroup:AddLabel("瞄准键")
+aimKeybind = aimKeyLabel:AddKeyPicker("NewAimKeybind", {
+    Default = "LeftAlt",
+    Text = "按住激活",
+    NoUI = false,
+    Callback = function() end
+})
+
+-- 手机模式开关
+NewAimGroup:AddToggle("NewAimAlwaysOn", {
+    Text = "手机模式 (始终瞄准)",
+    Default = false,
+    Callback = function(Value)
+        aimAlwaysOn = Value
+    end
+})
+
+NewAimGroup:AddDropdown("NewTargetPart", {
+    Values = {"Head", "HumanoidRootPart", "Torso", "RandomTorso/Head"},
+    Default = 1,
+    Multi = false,
+    Text = "命中部位",
+    Callback = function(Value)
+        targetPartName = Value
+    end
+})
+
+NewAimGroup:AddSlider("NewAimSmoothness", {
+    Text = "平滑度 (1=瞬间, 0=极慢)",
+    Default = 0.8,
+    Min = 0.1,
+    Max = 1,
+    Rounding = 1,
+    Callback = function(Value)
+        aimSmoothness = Value
+    end
+})
+
+NewAimGroup:AddSlider("NewAimPrediction", {
+    Text = "预测时间 (秒)",
+    Default = 0,
+    Min = 0,
+    Max = 0.5,
+    Rounding = 2,
+    Callback = function(Value)
+        aimPrediction = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewShowTarget", {
+    Text = "显示锁定目标 (高亮)",
+    Default = false,
+    Callback = function(Value)
+        showTargetEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewTeamCheck", {
+    Text = "队伍检测 (只瞄敌方)",
+    Default = false,
+    Callback = function(Value)
+        teamCheckEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewFriendCheck", {
+    Text = "好友检测",
+    Default = false,
+    Callback = function(Value)
+        friendCheckEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewForceFieldCheck", {
+    Text = "保护罩检测 (忽略无敌)",
+    Default = false,
+    Callback = function(Value)
+        forceFieldCheckEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewRagdollCheck", {
+    Text = "倒地检测 (忽略倒地)",
+    Default = false,
+    Callback = function(Value)
+        ragdollCheckEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewWallCheck", {
+    Text = "墙壁检测",
+    Default = false,
+    Callback = function(Value)
+        wallCheckEnabled = Value
+    end
+})
+
+NewAimGroup:AddToggle("NewFovEnabled", {
+    Text = "启用 FOV 范围",
+    Default = false,
+    Callback = function(Value)
+        fovEnabled = Value
+    end
+})
+
+NewAimGroup:AddSlider("NewFovRadius", {
+    Text = "FOV 半径",
+    Default = 150,
+    Min = 10,
+    Max = 800,
+    Rounding = 0,
+    Callback = function(Value)
+        fovRadius = Value
+    end
+})
+
+-- 子弹追踪组 (原封不动保留)
+local SilentGroup = Tabs.Combat:AddRightGroupbox("子弹追踪 (Silent Aim)","target")
+SilentGroup:AddToggle("SilentAim", {
+    Text = "独家自瞄 (Silent Aim)",
+    Default = false,
+    Callback = function(Value)
+        aimbotEnabledST = Value
+    end
+})
+SilentGroup:AddDropdown("SilentTargetPart", {
+    Values = {"Head", "HumanoidRootPart", "Torso", "RandomTorso/Head"},
+    Default = 1,
+    Multi = false,
+    Text = "命中部位 (Hit Part)",
+    Callback = function(Value)
+        targetPartNameST = Value
+    end
+})
+SilentGroup:AddSlider("SilentHitChance", {
+    Text = "命中率 (Hit Chance)",
+    Default = 100,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        hitChanceST = Value
+    end
+})
+SilentGroup:AddToggle("SilentShowTarget", {
+    Text = "显示锁定目标 (高亮)",
+    Default = false,
+    Callback = function(Value)
+        showTargetEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentTeamCheck", {
+    Text = "队伍检测 (只瞄敌方)",
+    Default = false,
+    Callback = function(Value)
+        teamCheckEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentFriendCheck", {
+    Text = "好友检测",
+    Default = false,
+    Callback = function(Value)
+        friendCheckEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentForceFieldCheck", {
+    Text = "保护罩检测 (忽略无敌)",
+    Default = false,
+    Callback = function(Value)
+        forceFieldCheckEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentRagdollCheck", {
+    Text = "倒地检测 (忽略倒地)",
+    Default = false,
+    Callback = function(Value)
+        ragdollCheckEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentWallCheck", {
+    Text = "墙壁检测",
+    Default = false,
+    Callback = function(Value)
+        wallCheckEnabledST = Value
+    end
+})
+SilentGroup:AddToggle("SilentFovEnabled", {
+    Text = "启用 FOV 范围",
+    Default = false,
+    Callback = function(Value)
+        fovEnabledST = Value
+    end
+})
+SilentGroup:AddSlider("SilentFovRadius", {
+    Text = "FOV 半径",
+    Default = 150,
+    Min = 10,
+    Max = 800,
+    Rounding = 0,
+    Callback = function(Value)
+        fovRadiusST = Value
+    end
+})
+
+-- 共用黑白名单组 (供子弹追踪和新自瞄共同使用)
+local ListGroup = Tabs.Combat:AddLeftGroupbox("黑/白名单设置","users")
+
+local function GetPlayerNames()
+    local names = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(names, p.Name)
+        end
+    end
+    return names
+end
+
+ListGroup:AddToggle("UseBlacklist", {
+    Text = "启用黑名单 (不瞄准)",
+    Default = false,
+    Callback = function(Value)
+        useBlacklistST = Value
+        useBlacklist = Value  -- 同步给新自瞄
+    end
+})
+
+local blacklistDropdown = ListGroup:AddDropdown("BlacklistConfig", {
+    Values = GetPlayerNames(),
+    Default = {},
+    Multi = true,
+    Text = "选择黑名单玩家",
+    Callback = function(val)
+        blacklistDataST = val
+        blacklistData = val  -- 同步给新自瞄
+    end
+})
+
+ListGroup:AddToggle("UseWhitelist", {
+    Text = "启用白名单 (只瞄准)",
+    Default = false,
+    Callback = function(Value)
+        useWhitelistST = Value
+        useWhitelist = Value  -- 同步给新自瞄
+    end
+})
+
+local whitelistDropdown = ListGroup:AddDropdown("WhitelistConfig", {
+    Values = GetPlayerNames(),
+    Default = {},
+    Multi = true,
+    Text = "选择白名单玩家",
+    Callback = function(val)
+        whitelistDataST = val
+        whitelistData = val  -- 同步给新自瞄
+    end
+})
+
+ListGroup:AddButton("刷新玩家列表", function()
+    local names = GetPlayerNames()
+    blacklistDropdown:SetValues(names)
+    whitelistDropdown:SetValues(names)
+end)
+
+local LightGroup = Tabs.World:AddLeftGroupbox("光照设置","sun")
+LightGroup:AddToggle("FullBright", {Text="全亮 FullBright", Default=false})
+LightGroup:AddSlider("TimeVal",    {Text="时间 0-24",  Default=14,     Min=0,   Max=24,     Rounding=1})
+LightGroup:AddSlider("FogVal",     {Text="雾距离",     Default=100000, Min=100, Max=500000, Rounding=0})
+
+local WorldGroup = Tabs.World:AddRightGroupbox("物理设置","settings")
+WorldGroup:AddSlider("GravVal",   {Text="重力", Default=196, Min=0, Max=1000, Rounding=0})
+WorldGroup:AddToggle("FreezeAll", {Text="冻结所有玩家", Default=false})
+WorldGroup:AddToggle("LowGrav",   {Text="低重力模式",   Default=false})
+
+local CamGroup = Tabs.World:AddLeftGroupbox("相机设置","camera")
+CamGroup:AddSlider("CamFOV",  {Text="相机FOV",    Default=70,  Min=1, Max=120,  Rounding=0})
+CamGroup:AddSlider("CamZoom", {Text="最大缩放距离",Default=400, Min=0, Max=1000, Rounding=0})
+CamGroup:AddButton("重置相机FOV", function() Camera.FieldOfView = 70 end)
+
+RunService.Heartbeat:Connect(function()
+    if T("FullBright") then
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 1e9
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(255,255,255)
+    else
+        Lighting.ClockTime = O("TimeVal") or 14
+        Lighting.FogEnd = O("FogVal") or 100000
+        Lighting.GlobalShadows = true
+    end
+    if T("LowGrav") then
+        workspace.Gravity = 20
+    else
+        workspace.Gravity = O("GravVal") or 196
+    end
+    Camera.FieldOfView = O("CamFOV") or 70
+    LocalPlayer.CameraMaxZoomDistance = O("CamZoom") or 400
+    if T("FreezeAll") then
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local r2 = p.Character:FindFirstChild("HumanoidRootPart")
+                if r2 then r2.Velocity = Vector3.new(0,0,0) end
+            end
+        end
+    end
+end)
+
+local ESPGroup = Tabs.ESP:AddLeftGroupbox("透视开关","users")
+local ESPStyle = Tabs.ESP:AddRightGroupbox("透视样式","palette")
+
+ESPGroup:AddToggle("ESPOn",        {Text="启用 ESP",         Default=false})
+ESPGroup:AddToggle("ESPBox",       {Text="2D 方框",           Default=true})
+ESPGroup:AddToggle("ESPChams",     {Text="高亮透视 Chams",    Default=true})
+ESPGroup:AddToggle("ESPName",      {Text="名字标签",           Default=true})
+ESPGroup:AddToggle("ESPDist",      {Text="显示距离",           Default=true})
+ESPGroup:AddToggle("ESPHP",        {Text="血条",              Default=true})
+ESPGroup:AddToggle("ESPSkel",      {Text="骨架透视",           Default=false})
+ESPGroup:AddToggle("ESPTeam",      {Text="排除队友",           Default=false})
+ESPGroup:AddToggle("ESPLimitDist", {Text="距离限制",           Default=false})
+ESPGroup:AddSlider("ESPMaxD",      {Text="最远距离", Default=500, Min=50, Max=2000, Rounding=0})
+
+ESPStyle:AddLabel("敌人颜色"):AddColorPicker("ESPCol",  {Default=Color3.fromRGB(255,0,0)})
+ESPStyle:AddLabel("队友颜色"):AddColorPicker("ESPTCol", {Default=Color3.fromRGB(0,255,0)})
+ESPStyle:AddLabel("方框颜色"):AddColorPicker("ESPBCol", {Default=Color3.fromRGB(255,255,255)})
+ESPStyle:AddLabel("骨架颜色"):AddColorPicker("ESPSCol", {Default=Color3.fromRGB(255,200,0)})
+ESPStyle:AddSlider("ESPFill",  {Text="高亮填充透明度", Default=0.65, Min=0, Max=1, Rounding=2})
+ESPStyle:AddSlider("ESPOut",   {Text="高亮描边透明度", Default=0,    Min=0, Max=1, Rounding=2})
+ESPStyle:AddSlider("ESPThick", {Text="方框厚度",       Default=1,    Min=1, Max=5, Rounding=0})
+ESPStyle:AddSlider("ESPNSize", {Text="名字大小",       Default=13,   Min=8, Max=24,Rounding=0})
+
+local ESPO = {}
+
+local SKEL15 = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+}
+local SKEL6 = {
+    {"Head","Torso"},{"Torso","Right Arm"},{"Torso","Left Arm"},{"Torso","Right Leg"},{"Torso","Left Leg"},
+}
+
+local function ND(t, p)
+    local d = Drawing.new(t)
+    for k,v in pairs(p or {}) do pcall(function() d[k]=v end) end
+    return d
+end
+
+local function MakeESP(pl)
+    if ESPO[pl] then return end
+    local skLines = {}
+    for i = 1, #SKEL15+#SKEL6 do
+        skLines[i] = ND("Line",{Color=Color3.fromRGB(255,200,0),Thickness=1,Visible=false})
+    end
+    ESPO[pl] = {
+        HL  = nil,
+        Box = {
+            T = ND("Line",{Thickness=1,Visible=false}),
+            B = ND("Line",{Thickness=1,Visible=false}),
+            L = ND("Line",{Thickness=1,Visible=false}),
+            R = ND("Line",{Thickness=1,Visible=false}),
+        },
+        NL  = ND("Text",{Center=true,Outline=true,Color=Color3.new(1,1,1),    Size=13,Font=2,Visible=false}),
+        DL  = ND("Text",{Center=true,Outline=true,Color=Color3.new(.8,.8,.8), Size=11,Font=2,Visible=false}),
+        HB  = ND("Line",{Color=Color3.fromRGB(0,255,0),  Thickness=3,Visible=false}),
+        HBG = ND("Line",{Color=Color3.fromRGB(40,40,40), Thickness=3,Visible=false}),
+        SK  = skLines,
+    }
+end
+
+local function HideAll(o)
+    for _,l in pairs(o.Box) do l.Visible=false end
+    o.NL.Visible=false o.DL.Visible=false o.HB.Visible=false o.HBG.Visible=false
+    for _,l in ipairs(o.SK) do l.Visible=false end
+    if o.HL then pcall(function() o.HL.Enabled=false end) end
+end
+
+local function DelESP(pl)
+    local o = ESPO[pl] if not o then return end
+    if o.HL then pcall(function() o.HL:Destroy() end) end
+    for _,l in pairs(o.Box) do pcall(function() l:Remove() end) end
+    pcall(function() o.NL:Remove() end) pcall(function() o.DL:Remove() end)
+    pcall(function() o.HB:Remove() end) pcall(function() o.HBG:Remove() end)
+    for _,l in ipairs(o.SK) do pcall(function() l:Remove() end) end
+    ESPO[pl] = nil
+end
+
+local function DrawESP(pl)
+    local o = ESPO[pl] if not o then return end
+    if pl == LocalPlayer then HideAll(o) return end
+    if not T("ESPOn") then HideAll(o) return end
+    local c = pl.Character if not c then HideAll(o) return end
+    local root = c:FindFirstChild("HumanoidRootPart")
+    local head = c:FindFirstChild("Head")
+    local hum  = c:FindFirstChildOfClass("Humanoid")
+    if not root or not head or not hum or hum.Health <= 0 then HideAll(o) return end
+    local isAlly = T("ESPTeam") and pl.Team ~= nil and pl.Team == LocalPlayer.Team
+    local myR = Root()
+    local dist = myR and (root.Position-myR.Position).Magnitude or 0
+    if T("ESPLimitDist") and dist > (O("ESPMaxD") or 500) then HideAll(o) return end
+    local col = isAlly and (O("ESPTCol") or Color3.fromRGB(0,255,0)) or (O("ESPCol") or Color3.fromRGB(255,0,0))
+    if T("ESPChams") and not isAlly then
+        if not o.HL or not o.HL.Parent then
+            local hl = Instance.new("Highlight")
+            hl.Name = "XbHL"
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Parent = c
+            o.HL = hl
+        end
+        o.HL.FillColor           = col
+        o.HL.OutlineColor        = col
+        o.HL.FillTransparency    = O("ESPFill") or 0.65
+        o.HL.OutlineTransparency = O("ESPOut")  or 0
+        o.HL.Enabled = true
+    else
+        if o.HL then pcall(function() o.HL.Enabled=false end) end
+    end
+    local hp3 = head.Position+Vector3.new(0,head.Size.Y/2,0)
+    local fp3 = root.Position-Vector3.new(0,3,0)
+    local hs,hv = Camera:WorldToViewportPoint(hp3)
+    local fs,fv = Camera:WorldToViewportPoint(fp3)
+    if hv and fv and T("ESPBox") then
+        local H2 = math.abs(fs.Y-hs.Y)
+        local W2 = H2*0.6
+        local bc = O("ESPBCol") or Color3.new(1,1,1)
+        local tk = O("ESPThick") or 1
+        local tl = Vector2.new(hs.X-W2/2,hs.Y)
+        local tr = Vector2.new(hs.X+W2/2,hs.Y)
+        local bl = Vector2.new(fs.X-W2/2,fs.Y)
+        local br = Vector2.new(fs.X+W2/2,fs.Y)
+        o.Box.T.From=tl o.Box.T.To=tr
+        o.Box.B.From=bl o.Box.B.To=br
+        o.Box.L.From=tl o.Box.L.To=bl
+        o.Box.R.From=tr o.Box.R.To=br
+        for _,l in pairs(o.Box) do l.Color=bc l.Thickness=tk l.Visible=true end
+        if T("ESPHP") then
+            local rat = math.clamp(hum.Health/math.max(hum.MaxHealth,1),0,1)
+            local bx = tl.X-5
+            o.HBG.From=Vector2.new(bx,tl.Y) o.HBG.To=Vector2.new(bx,bl.Y)
+            o.HBG.Thickness=tk+2 o.HBG.Visible=true
+            o.HB.From=Vector2.new(bx,tl.Y+(1-rat)*H2) o.HB.To=Vector2.new(bx,bl.Y)
+            o.HB.Color=Color3.fromRGB(math.floor((1-rat)*255),math.floor(rat*255),0)
+            o.HB.Thickness=tk+2 o.HB.Visible=true
+        else
+            o.HB.Visible=false o.HBG.Visible=false
+        end
+        local ns = O("ESPNSize") or 13
+        if T("ESPName") then
+            o.NL.Text=pl.Name
+            o.NL.Position=Vector2.new(hs.X,hs.Y-ns-2)
+            o.NL.Color=col o.NL.Size=ns o.NL.Visible=true
+        else o.NL.Visible=false end
+        if T("ESPDist") then
+            o.DL.Text=("[%dm]"):format(math.floor(dist))
+            o.DL.Position=Vector2.new(fs.X,fs.Y+2)
+            o.DL.Size=math.max(ns-2,8) o.DL.Visible=true
+        else o.DL.Visible=false end
+    else
+        for _,l in pairs(o.Box) do l.Visible=false end
+        o.NL.Visible=false o.DL.Visible=false o.HB.Visible=false o.HBG.Visible=false
+    end
+    for _,l in ipairs(o.SK) do l.Visible=false end
+    if T("ESPSkel") then
+        local isR6 = c:FindFirstChild("Torso") ~= nil
+        local sk = isR6 and SKEL6 or SKEL15
+        local off = isR6 and #SKEL15 or 0
+        local sc = O("ESPSCol") or Color3.fromRGB(255,200,0)
+        for i,pair in ipairs(sk) do
+            local p1 = c:FindFirstChild(pair[1])
+            local p2 = c:FindFirstChild(pair[2])
+            if p1 and p2 then
+                local s1,v1 = Camera:WorldToViewportPoint(p1.Position)
+                local s2,v2 = Camera:WorldToViewportPoint(p2.Position)
+                local ln = o.SK[off+i]
+                if ln and v1 and v2 then
+                    ln.From=Vector2.new(s1.X,s1.Y) ln.To=Vector2.new(s2.X,s2.Y)
+                    ln.Color=sc ln.Visible=true
+                end
+            end
+        end
+    end
+end
+
+for _,p in ipairs(Players:GetPlayers()) do MakeESP(p) end
+Players.PlayerAdded:Connect(function(p)
+    MakeESP(p)
+    p.CharacterAdded:Connect(function()
+        local o = ESPO[p]
+        if o and o.HL then pcall(function() o.HL:Destroy() end) o.HL=nil end
+    end)
+end)
+Players.PlayerRemoving:Connect(DelESP)
+RunService.RenderStepped:Connect(function()
+    for _,p in ipairs(Players:GetPlayers()) do
+        if not ESPO[p] then MakeESP(p) end
+        pcall(DrawESP,p)
+    end
+end)
+
+local ChatGroup = Tabs.Misc:AddLeftGroupbox("聊天工具","message-square")
+ChatGroup:AddInput("ChatMsg",{Text="发送内容",Default="Hello!"})
+ChatGroup:AddButton("发送聊天", function()
+    local m = O("ChatMsg")
+    if not m or m == "" then Notify("聊天","内容不能为空") return end
+    local ok = SendChat(m)
+    if ok then
+        Notify("聊天","已发送: "..m)
+    else
+        Notify("聊天","发送失败，游戏可能不支持")
+    end
+end)
+ChatGroup:AddButton("刷新聊天框", function()
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat,false) end)
+    task.wait(0.1)
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat,true) end)
+    Notify("聊天","已刷新")
+end)
+ChatGroup:AddToggle("SpamChat",{Text="循环刷频发送(慎用)",Default=false})
+ChatGroup:AddSlider("SpamDelay",{Text="发送间隔(秒)",Default=3,Min=1,Max=30,Rounding=0})
+
+task.spawn(function()
+    while task.wait(O("SpamDelay") or 3) do
+        if T("SpamChat") then
+            local m = O("ChatMsg")
+            if m and m ~= "" then SendChat(m) end
+        end
+    end
+end)
+
+local UITogGroup = Tabs.Misc:AddRightGroupbox("界面开关","layout")
+UITogGroup:AddToggle("HidePList",{Text="隐藏玩家列表",Default=false})
+UITogGroup:AddToggle("HideHP2",  {Text="隐藏血量UI",  Default=false})
+UITogGroup:AddToggle("HideBag",  {Text="隐藏背包UI",  Default=false})
+
+RunService.Heartbeat:Connect(function()
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not T("HidePList")) end)
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health,     not T("HideHP2"))   end)
+    pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack,   not T("HideBag"))   end)
+end)
+
+local ToolGroup = Tabs.Misc:AddLeftGroupbox("开发工具","tool")
+ToolGroup:AddButton("打印所有远程事件", function()
+    local n = 0
+    for _,v in ipairs(game:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then print(v:GetFullName()) n=n+1 end
+    end
+    Notify("远程事件","共 "..n.." 个")
+end)
+ToolGroup:AddButton("打印所有脚本", function()
+    local n = 0
+    for _,v in ipairs(game:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") or v:IsA("ModuleScript") then print(v:GetFullName()) n=n+1 end
+    end
+    Notify("脚本","共 "..n.." 个")
+end)
+ToolGroup:AddButton("禁用本地LocalScript", function()
+    for _,v in ipairs(LocalPlayer:GetDescendants()) do
+        if v:IsA("LocalScript") then pcall(function() v.Disabled=true end) end
+    end
+    Notify("脚本","已禁用")
+end)
+ToolGroup:AddButton("打印玩家列表", function()
+    for _,p in ipairs(Players:GetPlayers()) do
+        print(p.Name.." | Team: "..(p.Team and p.Team.Name or "无"))
+    end
+    Notify("玩家列表","已打印到控制台")
+end)
+
+local AutoGroup = Tabs.Misc:AddRightGroupbox("自动化","repeat")
+AutoGroup:AddToggle("AutoFarm",  {Text="自动拾取物品",Default=false})
+AutoGroup:AddSlider("FarmRange", {Text="拾取范围",Default=15,Min=1,Max=100,Rounding=0})
+AutoGroup:AddToggle("AutoRejoin",{Text="死亡自动重生",Default=false})
+
+RunService.Heartbeat:Connect(function()
+    if not T("AutoFarm") then return end
+    local r = Root() if not r then return end
+    local rng = O("FarmRange") or 15
+    local ch = Char()
+    for _,obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and not (ch and obj:IsDescendantOf(ch)) then
+            if (obj.Position-r.Position).Magnitude <= rng then
+                if obj:FindFirstChildOfClass("TouchTransmitter") then
+                    pcall(function()
+                        firetouchinterest(r,obj,0)
+                        firetouchinterest(r,obj,1)
+                    end)
+                end
+            end
+        end
+    end
+end)
+
+local lastHumDied = false
+RunService.Heartbeat:Connect(function()
+    if not T("AutoRejoin") then lastHumDied=false return end
+    local h = Hum()
+    if h and h.Health <= 0 and not lastHumDied then
+        lastHumDied = true
+        task.delay(1, function()
+            LocalPlayer:LoadCharacter()
+            lastHumDied = false
+        end)
+    end
+end)
+
+task.spawn(function()
+    local last = tick()
+    while task.wait(0.1) do
+        local now = tick()
+        local fps = math.floor(1/math.max(now-last,0.001))
+        last = now
+        local ping = 0
+        pcall(function() ping=math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+        local r = Root()
+        local pos = "--"
+        if r then local p=r.Position pos=("%.0f|%.0f|%.0f"):format(p.X,p.Y,p.Z) end
+        pcall(function() LbFPS:SetText("帧率: "..fps) end)
+        pcall(function() LbPing:SetText("延迟: "..ping.."ms") end)
+        pcall(function() LbPos:SetText("坐标: "..pos) end)
+        pcall(function() LbTime:SetText("时间: "..os.date("%H:%M:%S")) end)
+        local h = Hum()
+        if h then
+            if T("WalkOn") then pcall(function() h.WalkSpeed=O("WalkVal") or 16 end) end
+            if T("JumpOn") then pcall(function() h.JumpPower=O("JumpVal") or 50 end) end
+            if T("GodMode") then pcall(function() h.Health=h.MaxHealth end) end
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(c)
+    task.wait(0.5)
+    local h = c:FindFirstChildOfClass("Humanoid")
+    if h then
+        if T("WalkOn") then pcall(function() h.WalkSpeed=O("WalkVal") or 16 end) end
+        if T("JumpOn") then pcall(function() h.JumpPower=O("JumpVal") or 50 end) end
+        if T("GodMode") then pcall(function() h.MaxHealth=math.huge h.Health=math.huge end) end
+    end
+    local o = ESPO[LocalPlayer]
+    if o and o.HL then pcall(function() o.HL:Destroy() end) o.HL=nil end
+    Notify("角色","设置已重新应用 ✓")
+end)
+
+local MenuGroup = Tabs.UI:AddLeftGroupbox("菜单配置","wrench")
+MenuGroup:AddLabel("菜单快捷键"):AddKeyPicker("MenuKeybind",{Default="RightShift",NoUI=true,Text="Menu keybind"})
+Library.ToggleKeybind = Library.Options.MenuKeybind
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+ThemeManager:ApplyToTab(Tabs.UI)
+SaveManager:BuildConfigSection(Tabs.UI)
+SaveManager:LoadAutoloadConfig()
+
+Notify("Xb Hub","加载完成 v2.5 ✓",5)
