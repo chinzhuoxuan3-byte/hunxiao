@@ -1,0 +1,312 @@
+-- [Source]: loadstring
+-- [Detection]: Plain/Unknown
+-- [Time]: 2026-03-19 16:19:38
+
+local ReplicatedStorage=game:GetService('ReplicatedStorage')local
+UserInputService=game:GetService('UserInputService')local VirtualUser=game:
+GetService('VirtualUser')local Players=game:GetService('Players')local Library=
+require(ReplicatedStorage.Framework.Library)local IsMobile=UserInputService.
+TouchEnabled local LocalPlayer=Players.LocalPlayer local Fluent=loadstring(game:
+HttpGet(
+[[https://github.com/ExtremeAntonis/Fluent/releases/latest/download/main.lua]])
+)()local SaveManager=loadstring(game:HttpGet(
+[[https://raw.githubusercontent.com/ExtremeAntonis/Fluent/master/Addons/SaveManager.lua]]
+))()local InterfaceManager=loadstring(game:HttpGet(
+[[https://raw.githubusercontent.com/ExtremeAntonis/Fluent/master/Addons/InterfaceManager.lua]]
+))()local Options=Fluent.Options local DesktopSize=UDim2.fromOffset(580,460)
+local DesktopTabWidth=160 local MobileSize=UDim2.fromOffset(520,300)local
+MobileTabWidth=100 local Window=Fluent:CreateWindow({Title='EXTREMEHUB',SubTitle
+='by _extreme',TabWidth=IsMobile and MobileTabWidth or DesktopTabWidth,Size=
+IsMobile and MobileSize or DesktopSize,Acrylic=false,Theme='Darker',MinimizeKey=
+Enum.KeyCode.RightControl})local Tabs={Farming=Window:AddTab({Title='Farming',
+Icon='leaf'}),Eggs=Window:AddTab({Title='Eggs',Icon='egg'}),Daycare=Window:
+AddTab({Title='Daycare',Icon='bone'}),Menus=Window:AddTab({Title='Menus',Icon=
+'eye'}),Misc=Window:AddTab({Title='Misc',Icon='layers'}),Settings=Window:AddTab(
+{Title='Settings',Icon='settings'})}local Sections={Farming={Automation=Tabs.
+Farming:AddSection('Automation'),Configuration=Tabs.Farming:AddSection(
+'Configuration'),Utilities=Tabs.Farming:AddSection('Utilities')},Eggs={Hatching=
+Tabs.Eggs:AddSection('Hatching'),Configuration=Tabs.Eggs:AddSection(
+'Configuration'),Utilities=Tabs.Eggs:AddSection('Utilities')},Misc={Automation=
+Tabs.Misc:AddSection('Automation'),Utilities=Tabs.Misc:AddSection('Utilities'),
+Character=Tabs.Misc:AddSection('Character')},Daycare={Automation=Tabs.Daycare:
+AddSection('Automation'),Configuration=Tabs.Daycare:AddSection('Configuration')}
+}local Network=require(game:GetService('ReplicatedStorage').Library.Client.
+Network)local Fire,Invoke=Network.Fire,Network.Invoke local old old=
+hookfunction(getupvalue(Fire,1),function(...)return true end)local function
+GetEquippedPets()local EquippedPets={}for PetID,_ in Library.Save.Get().
+PetsEquipped do table.insert(EquippedPets,PetID)end return EquippedPets end
+local function GetCoinsInWorldArea(World,Area)local CoinsInArea={}local Coins=
+Invoke('Get Coins')for Id,Data in Coins do if string.lower(Data.w)==string.
+lower(World)and string.lower(Data.a)==string.lower(Area)then table.insert(
+CoinsInArea,Id)end end return CoinsInArea end local AutoFarmToggled=false
+Sections.Farming.Automation:AddToggle('AutoFarm',{Title='Auto-Farm',Description=
+'',Default=false,Callback=function(state)AutoFarmToggled=state if
+AutoFarmToggled then task.spawn(function()while AutoFarmToggled do task.wait()
+pcall(function()local EquippedPets=GetEquippedPets()local CoinsInWorldArea=
+GetCoinsInWorldArea(Options.WorldsDropdown.Value,Options.AreasDropdown.Value)for
+i,Id in CoinsInWorldArea do local PetID=EquippedPets[i%#EquippedPets+1]Invoke(
+'Join Coin',Id,{[1]=PetID})Fire('Farm Coin',Id,PetID)if not AutoFarmToggled then
+break end end end)if Fluent.Unloaded then break end end end)end end})local
+AutoCollectOrbsToggled=false Sections.Farming.Automation:AddToggle(
+'AutoCollectOrbs',{Title='Orb Collection',Description='',Default=false,Callback=
+function(state)AutoCollectOrbsToggled=state if AutoCollectOrbsToggled then task.
+spawn(function()while AutoCollectOrbsToggled do task.wait(0.5)pcall(function()
+for _,Orb in pairs(Library.Things.Orbs:GetChildren())do Fire('Claim Orbs',{[1]=
+Orb.Name})end end)if Fluent.Unloaded then break end end end)end end})local
+AutoCollectLootbagsToggled=false Sections.Farming.Automation:AddToggle(
+'AutoCollectLootbags',{Title='Lootbag Collection',Description='',Default=false,
+Callback=function(state)AutoCollectLootbagsToggled=state if
+AutoCollectLootbagsToggled then task.spawn(function()while
+AutoCollectLootbagsToggled do task.wait(0.5)pcall(function()for _,Lootbag in
+pairs(Library.Things.Lootbags:GetChildren())do task.wait()Fire('Collect Lootbag'
+,Lootbag.Name,Lootbag.Position)end end)if Fluent.Unloaded then break end end end
+)end end})local Worlds={}local Areas={}local AreaNames={}local WorldToAreas={}
+for Name,Data in pairs(Library.Directory.Worlds)do Data.Name=Name table.insert(
+Worlds,Data)end table.sort(Worlds,function(a,b)if a.worldOrder==0 and b.
+worldOrder~=0 then return false end if b.worldOrder==0 and a.worldOrder~=0 then
+return true end return a.worldOrder<b.worldOrder end)for i,Data in ipairs(Worlds
+)do Worlds[i]=Data.Name end for Area,Data in pairs(Library.Directory.Areas)do
+Data.area=Area if(not Data.isShop and not Data.hidden)or(Data.isShop and Data.
+luckyOrder)then table.insert(Areas,Data)end end table.sort(Areas,function(a,b)
+return a.id<b.id end)for _,Area in ipairs(Areas)do local w=Area.world if w then
+if not WorldToAreas[w]then WorldToAreas[w]={}end table.insert(WorldToAreas[w],
+Area.area)end table.insert(AreaNames,Area.area)end local FilteredWorlds={}for _,
+World in ipairs(Worlds)do if WorldToAreas[World]then table.insert(FilteredWorlds
+,World)end end Worlds=FilteredWorlds local WorldsDropdown=Sections.Farming.
+Configuration:AddDropdown('WorldsDropdown',{Title='Target World',Description='',
+Values=Worlds,Multi=false,Default=1})local AreasDropdown=Sections.Farming.
+Configuration:AddDropdown('AreasDropdown',{Title='Target Area',Description='',
+Values=WorldToAreas['Spawn'],Multi=false,Default=1})WorldsDropdown:OnChanged(
+function(Value)local Areas=WorldToAreas[Value]AreasDropdown:SetValues(Areas)if
+table.find(Areas,AreasDropdown.Value)then return end AreasDropdown:SetValue(
+Areas[1])end)local function GetCurrencyBalance(Currency)return Library.Save.Get(
+)[Currency]end local FarmingStatsToggled=false local Commas=Library.Functions.
+Commas local CurrencyMenus=LocalPlayer.PlayerGui.Main.Right local
+StatCurrencyMenus={}local CurrencyTypes={}local function AddStatCurrencyMenu(
+CurrencyType)local CurrencyMenu=CurrencyMenus:FindFirstChild(CurrencyType):
+Clone()CurrencyMenu.Name=tostring(CurrencyType..'2')CurrencyMenu.Parent=
+CurrencyMenus CurrencyMenu.Size=UDim2.new(0,175,0,30)CurrencyMenu.LayoutOrder=
+CurrencyMenu.LayoutOrder+1 StatCurrencyMenus[CurrencyType]=CurrencyMenu task.
+spawn(function()local MegaTable={}local sum=1 local ptime=0 local last=tick()
+local now=last local TICK_TIME=1 while FarmingStatsToggled do task.wait()
+CurrencyMenu.Visible=CurrencyMenus:FindFirstChild(CurrencyType).Visible if ptime
+>=TICK_TIME then while ptime>=TICK_TIME do ptime=ptime-TICK_TIME end local
+CurrentBalance=GetCurrencyBalance(CurrencyType)MegaTable[sum]=CurrentBalance
+local Diffy=CurrentBalance-(MegaTable[sum-120]or MegaTable[1])sum=sum+1
+StatCurrencyMenus[CurrencyType].Amount.Text=tostring(Commas(Diffy)..' in 60s')
+StatCurrencyMenus[CurrencyType]['Amount_odometerGUIFX'].Text=tostring(Commas(
+Diffy)..' in 60s')end now=tick()ptime=ptime+(now-last)last=now if Fluent.
+Unloaded then break end end end)end Sections.Farming.Utilities:AddToggle(
+'FarmingStats',{Title='Income Monitor',Description=
+'Live view of your current farming efficiency.',Default=false,Callback=function(
+state)FarmingStatsToggled=state if FarmingStatsToggled then task.spawn(function(
+)while FarmingStatsToggled do local TempMenus={}for _,Menu in CurrencyMenus:
+GetChildren()do if not table.find(CurrencyTypes,Menu.Name)and Menu:IsA('Frame')
+and Menu.Visible and Menu.Name~='Rank'and not string.find(Menu.Name,'2')then
+table.insert(TempMenus,Menu)end end for _,Menu in TempMenus do if Menu.Name==
+'Diamonds'then Menu.LayoutOrder=99997 else Menu.LayoutOrder=99999+(#
+CurrencyTypes*2)end table.insert(CurrencyTypes,Menu.Name)end for _,CurrencyType
+in CurrencyTypes do if not StatCurrencyMenus[CurrencyType]then
+AddStatCurrencyMenu(CurrencyType)end end TempMenus={}task.wait(1)if Fluent.
+Unloaded then for _,StatCurrencyMenu in StatCurrencyMenus do StatCurrencyMenu:
+Destroy()end CurrencyTypes={}StatCurrencyMenus={}break end end end)else for _,
+StatCurrencyMenu in StatCurrencyMenus do StatCurrencyMenu:Destroy()end
+CurrencyTypes={}StatCurrencyMenus={}end end})local AutoUseTripleCoinsToggled=
+false Sections.Farming.Utilities:AddToggle('AutoUseTripleCoins',{Title=
+'Auto Use Triple Coins',Description=
+'Refreshes only upon expiration to prevent waste.',Default=false,Callback=
+function(state)AutoUseTripleCoinsToggled=state if AutoUseTripleCoinsToggled then
+task.spawn(function()while AutoUseTripleCoinsToggled do task.wait(1)if not
+LocalPlayer.PlayerGui.Main.Boosts:FindFirstChild('Triple Coins')then Fire(
+'Activate Boost','Triple Coins')end if Fluent.Unloaded then break end end end)
+end end})local AutoUseTripleDamageToggled=false Sections.Farming.Utilities:
+AddToggle('AutoUseTripleDamage',{Title='Auto Use Triple Damage',Description=
+'Refreshes only upon expiration to prevent waste.',Default=false,Callback=
+function(state)AutoUseTripleDamageToggled=state if AutoUseTripleDamageToggled
+then task.spawn(function()while AutoUseTripleDamageToggled do task.wait(1)if not
+LocalPlayer.PlayerGui.Main.Boosts:FindFirstChild('Triple Damage')then Fire(
+'Activate Boost','Triple Damage')end if Fluent.Unloaded then break end end end)
+end end})local AutoEquipBestPetsToggled=false Sections.Farming.Utilities:
+AddToggle('AutoEquipBestPets',{Title='Auto Equip Best Pets',Description='',
+Default=false,Callback=function(state)AutoEquipBestPetsToggled=state if
+AutoEquipBestPetsToggled then task.spawn(function()while
+AutoEquipBestPetsToggled do task.wait(1)Invoke('Equip Best Pets')if Fluent.
+Unloaded then break end end end)end end})local AutoHatchToggled=false Sections.
+Eggs.Hatching:AddToggle('AutoHatch',{Title='Auto-Hatch',Description='',Default=
+false,Callback=function(state)AutoHatchToggled=state if AutoHatchToggled then
+task.spawn(function()while AutoHatchToggled do task.wait(0.2)local IsTriple=
+Options.HatchAmountDropdown.Value=='Triple'and true or false local IsOctuple=
+Options.HatchAmountDropdown.Value=='Octuple'and true or false Invoke('Buy Egg',
+Options.EggsDropdown.Value,IsTriple,IsOctuple)if Fluent.Unloaded then break end
+end end)end end})local OpenEggAnimation local DisableHatchingAnimationToggled=
+false Sections.Eggs.Hatching:AddToggle('DisableHatchingAnimationToggled',{Title=
+'Disable Hatching Animation',Description='',Default=false,Callback=function(
+state)DisableHatchingAnimationToggled=state if DisableHatchingAnimationToggled
+then for _,v in pairs(getgc(true))do if typeof(v)=='table'and rawget(v,'OpenEgg'
+)then if not OpenEggAnimation then OpenEggAnimation=v.OpenEgg end v.OpenEgg=
+function()return end end end task.spawn(function()while
+DisableHatchingAnimationToggled do task.wait(1)if Fluent.Unloaded then for _,v
+in pairs(getgc(true))do if typeof(v)=='table'and rawget(v,'OpenEgg')then v.
+OpenEgg=OpenEggAnimation end end break end end end)elseif OpenEggAnimation then
+for _,v in pairs(getgc(true))do if typeof(v)=='table'and rawget(v,'OpenEgg')then
+v.OpenEgg=OpenEggAnimation end end end end})local Eggs={}local EggNames={}for
+Egg,Data in Library.Directory.Eggs do if not Data.disabled and Data.hatchable
+then Data.name=Egg table.insert(Eggs,Data)end end table.sort(Eggs,function(a,b)
+local posA=table.find(AreaNames,a.area)or 9999 local posB=table.find(AreaNames,b
+.area)or 9999 if posA==posB then return a.cost<b.cost end return posA<posB end)
+for _,Egg in Eggs do table.insert(EggNames,Egg.name)end Sections.Eggs.
+Configuration:AddDropdown('EggsDropdown',{Title='Select Egg',Description='',
+Values=EggNames,Multi=false,Default=1})Sections.Eggs.Configuration:AddDropdown(
+'HatchAmountDropdown',{Title='Hatch Amount',Description=
+[[Select amount to hatch. Gamepasses are required for Triple and Octuple.]],
+Values={'Single','Triple','Octuple'},Multi=false,Default=1})local
+AutoUseUltraLuckyToggled=false Sections.Eggs.Utilities:AddToggle(
+'AutoUseUltraLucky',{Title='Auto Use Ultra Lucky',Description=
+'Refreshes only upon expiration to prevent waste.',Default=false,Callback=
+function(state)AutoUseUltraLuckyToggled=state if AutoUseUltraLuckyToggled then
+task.spawn(function()while AutoUseUltraLuckyToggled do task.wait(1)if not
+LocalPlayer.PlayerGui.Main.Boosts:FindFirstChild('Ultra Lucky')then Fire(
+'Activate Boost','Ultra Lucky')end if Fluent.Unloaded then break end end end)end
+end})local AutoUseSuperLuckyToggled=false Sections.Eggs.Utilities:AddToggle(
+'AutoUseSuperLucky',{Title='Auto Use Super Lucky',Description=
+'Refreshes only upon expiration to prevent waste.',Default=false,Callback=
+function(state)AutoUseSuperLuckyToggled=state if AutoUseSuperLuckyToggled then
+task.spawn(function()while AutoUseSuperLuckyToggled do task.wait(1)if not
+LocalPlayer.PlayerGui.Main.Boosts:FindFirstChild('Super Lucky')then Fire(
+'Activate Boost','Super Lucky')end if Fluent.Unloaded then break end end end)end
+end})local DaycareScript=getsenv(LocalPlayer.PlayerScripts.Scripts.GUIs.Daycare)
+local AutoClaimDaycareToggled=false Sections.Daycare.Automation:AddToggle(
+'AutoClaimDaycare',{Title='Auto Claim',Description='',Default=false,Callback=
+function(state)AutoClaimDaycareToggled=state if AutoClaimDaycareToggled then
+task.spawn(function()while AutoClaimDaycareToggled do pcall(function()local
+CurrentEnrolled=#Library.Save.Get().DaycareQueue or 0 if CurrentEnrolled>0 then
+for I,Data in Library.Save.Get()['DaycareQueue']do local TimeLeft=Library.Shared
+.DaycareComputeRemainingTime(Library.Save.Get(),Data)if TimeLeft<=0 then local
+v152=Library.Save.Get()local v153,v154,v155,v156,v157=Invoke('Daycare: Claim',
+nil)if not v153 then return end assert(v155)assert(v156)if v157 then if Library.
+Shared.IsHardcore then v152.DaycareHardcoreQueue=v157 else v152.DaycareQueue=
+v157 end DaycareScript.UpdateView()end DaycareScript.UpdateClaim(v155,v156)end
+end end end)if Fluent.Unloaded then break end task.wait(3)end end)end end})local
+PetFolders=game:GetService('ReplicatedStorage').__DIRECTORY.Pets local function
+GetPetRarity(PetID:number):string?for _,Folder in PetFolders:GetChildren()do
+local FolderPetID=string.split(Folder.Name,' - ')[1]if FolderPetID==PetID then
+local PetData=Folder:FindFirstChildOfClass('ModuleScript')if PetData then return
+require(PetData).rarity end end end return nil end local function
+GetPetsByStrength()local Pets=table.clone(Library.Save.Get().Pets)table.sort(
+Pets,function(a,b)return a.s>b.s end)return Pets end local
+AutoEnrollDaycareToggled=false Sections.Daycare.Automation:AddToggle(
+'AutoEnrollDaycare',{Title='Auto Enroll',Description='',Default=false,Callback=
+function(state)AutoEnrollDaycareToggled=state if AutoEnrollDaycareToggled then
+task.spawn(function()while AutoEnrollDaycareToggled do local PetsToEnroll={}
+local MaxSlots=Library.Save.Get().DaycareTier==0 and 10 or 20 local
+CurrentEnrolled=#Library.Save.Get().DaycareQueue or 0 local AvailableSlots=
+MaxSlots-CurrentEnrolled local MinStrength=Options.MinEnrollStrength.Value local
+MaxStrength=Options.MaxEnrollStrength.Value local RaritiesToEnroll=Options.
+RaritiesToEnroll.Values local EnrollNameFilter=Options.EnrollNameFilter.Value
+for _,Pet in GetPetsByStrength()do if#PetsToEnroll>=AvailableSlots then break
+end local ID=Pet.id local UID=Pet.uid local Name=Pet.nk local Strength=Pet.s
+local Locked=Pet.l or false local Rarity=GetPetRarity(ID)if Strength>=
+MinStrength and Strength<=MaxStrength and table.find(RaritiesToEnroll,Rarity)and
+not Locked then if EnrollNameFilter~=''then if string.find(Name,EnrollNameFilter
+)then table.insert(PetsToEnroll,UID)end else table.insert(PetsToEnroll,UID)end
+end end if#PetsToEnroll>0 then Invoke('Daycare: Enroll',PetsToEnroll)end if
+Fluent.Unloaded then break end task.wait(1)end end)end end})Sections.Daycare.
+Configuration:AddInput('MinEnrollStrength',{Title='Min Strength',Description='',
+Default='0',Placeholder='eg. 0',Numeric=false,Finished=false,Callback=function(
+Value)local Value=Value or 0 Options.MinEnrollStrength.Value=Library.Functions.
+ParseNumberSmart(Value)end})Sections.Daycare.Configuration:AddInput(
+'MaxEnrollStrength',{Title='Max Strength',Description='',Default='100m',
+Placeholder='eg. 100m',Numeric=false,Finished=false,Callback=function(Value)
+local Value=Value or 0 Options.MaxEnrollStrength.Value=Library.Functions.
+ParseNumberSmart(Value)end})Options.MinEnrollStrength.Value=Library.Functions.
+ParseNumberSmart(Options.MinEnrollStrength.Value)Options.MaxEnrollStrength.Value
+=Library.Functions.ParseNumberSmart(Options.MaxEnrollStrength.Value)local
+PetRarityList={}for _,Rarity in Library.Shared.PetRarityList do table.insert(
+PetRarityList,Rarity)end table.sort(PetRarityList,function(a,b)return Library.
+Shared.PetRarityNumbers[a]<Library.Shared.PetRarityNumbers[b]end)Sections.
+Daycare.Configuration:AddDropdown('RaritiesToEnroll',{Title='Rarities to Enroll'
+,Description='',Values=PetRarityList,Multi=true,Default=PetRarityList})Sections.
+Daycare.Configuration:AddInput('EnrollNameFilter',{Title='Pet Name Filter',
+Description='',Default='',Placeholder='e.g. Max',Numeric=false,Finished=false,
+Callback=function(Value)end})local Menus={{Title='Bank',Name='Bank'},{Title=
+'Fuse Machine',Name='FusePets'},{Title='Gold Machine',Name='Golden'},{Title=
+'Rainbow Machine',Name='Rainbow'},{Title='Dark Matter Machine',Name='DarkMatter'
+},{Title='Pet Collection',Name='Collection'},{Title='Enchanting',Name=
+'EnchantPets'},{Title='Merchant',Name='Merchant'},{Title='Upgrades',Name=
+'Upgrades'},{Title='Mailbox',Name='Mailbox'}}for _,Menu in Menus do Tabs.Menus:
+AddButton({Title=Menu.Title,Description='',Callback=function()LocalPlayer.
+PlayerGui:FindFirstChild(Menu.Name).Enabled=true end})end local
+AutoRedeemFreeGiftsToggled=false Sections.Misc.Automation:AddToggle(
+'AutoRedeemFreeGifts',{Title='Auto Redeem Free Gifts',Description='',Default=
+false,Callback=function(state)AutoRedeemFreeGiftsToggled=state if
+AutoRedeemFreeGiftsToggled then task.spawn(function()while
+AutoRedeemFreeGiftsToggled do task.wait(1)for I=1,12 do Invoke(
+'Redeem Free Gift',I)end if Fluent.Unloaded then break end end end)end end})
+local AutoRedeemRankRewardsToggled=false Sections.Misc.Automation:AddToggle(
+'AutoRedeemRankRewards',{Title='Auto Redeem Rank Rewards',Description='',Default
+=false,Callback=function(state)AutoRedeemRankRewardsToggled=state if
+AutoRedeemRankRewardsToggled then task.spawn(function()while
+AutoRedeemRankRewardsToggled do task.wait(1)Invoke('Redeem Rank Rewards')if
+Fluent.Unloaded then break end end end)end end})local
+AutoRedeemVIPRewardsToggled=false Sections.Misc.Automation:AddToggle(
+'AutoRedeemVIPRewards',{Title='Auto Redeem VIP Rewards',Description='',Default=
+false,Callback=function(state)AutoRedeemVIPRewardsToggled=state if
+AutoRedeemVIPRewardsToggled then task.spawn(function()while
+AutoRedeemVIPRewardsToggled do task.wait(1)Invoke('Redeem VIP Rewards')if Fluent
+.Unloaded then break end end end)end end})local MerchantTiersDropdown=Sections.
+Misc.Automation:AddDropdown('MerchantTiersDropdown',{Title='Merchant Tiers',
+Description='',Values={'1','2','3'},Multi=true,Default={'1','2','3'}})local
+AutoBuyMerchantToggled=false Sections.Misc.Automation:AddToggle(
+'AutoBuyMerchant',{Title='Auto Buy Merchant',Description='',Default=false,
+Callback=function(state)AutoBuyMerchantToggled=state if AutoBuyMerchantToggled
+then task.spawn(function()while AutoBuyMerchantToggled do task.wait(1)for Tier,_
+in MerchantTiersDropdown.Value do Invoke('Buy Merchant Item',tonumber(Tier))end
+if Fluent.Unloaded then break end end end)end end})local Hoverboards=require(
+ReplicatedStorage['__DIRECTORY'].Hoverboards['Grab All Hoverboards'])local
+HoverboardsEnv=getsenv(LocalPlayer.PlayerScripts.Scripts.GUIs.Hoverboards)
+Sections.Misc.Utilities:AddButton({Title='Unlock All Hoverboards',Description=''
+,Callback=function()local Save=require(game:GetService('ReplicatedStorage').
+Library.Client.Save).Get()Save.Hoverboards={}for Hoverboard,Data in Hoverboards
+do table.insert(Save.Hoverboards,Hoverboard)end HoverboardsEnv.Update()
+HoverboardsEnv.Equip=function(Hoverboard)Save.EquippedHoverboard=Hoverboard
+HoverboardsEnv.Update()end end})local GroupID=5060810 local StaffDetectorToggled
+=false Sections.Misc.Utilities:AddToggle('StaffDetector',{Title='Staff Detector'
+,Description='Kicks you if a staff member joins to avoid detection.',Default=
+false,Callback=function(state)StaffDetectorToggled=state if StaffDetectorToggled
+then task.spawn(function()while StaffDetectorToggled do task.wait(1)for _,Player
+in Players do if Player:IsInGroup(GroupID)then LocalPlayer:Kick(
+'BIG GAMES STAFF JOINED YOUR GAME')end end if Fluent.Unloaded then break end end
+end)end end})local IdledConnection local AntiAFKToggled=false Sections.Misc.
+Utilities:AddToggle('AntiAFK',{Title='Anti AFK',Description='',Default=false,
+Callback=function(state)AntiAFKToggled=state if AntiAFKToggled then
+IdledConnection=LocalPlayer.Idled:Connect(function()local Vector=Vector2.new(0,0
+)local CameraCFrame=Workspace.CurrentCamera.CFrame VirtualUser:Button2Down(
+Vector,CameraCFrame)VirtualUser:Button2Up(Vector,CameraCFrame)end)task.spawn(
+function()while AntiAFKToggled do task.wait(1)if Fluent.Unloaded and
+IdledConnection then IdledConnection:Disconnect()break end end end)else if
+IdledConnection then IdledConnection:Disconnect()end end end})local Humanoid=
+LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass('Humanoid'
+)Sections.Misc.Character:AddSlider('WalkSpeed',{Title='Walk Speed',Description=
+'',Default=Humanoid.WalkSpeed,Min=0,Max=512,Rounding=1,Callback=function(Value)
+local Humanoid=LocalPlayer.Character and LocalPlayer.Character:
+FindFirstChildOfClass('Humanoid')if Humanoid then Humanoid.WalkSpeed=Value end
+end})Sections.Misc.Character:AddSlider('JumpPower',{Title='Jump Power',
+Description='',Default=Humanoid.JumpPower,Min=0,Max=512,Rounding=1,Callback=
+function(Value)local Humanoid=LocalPlayer.Character and LocalPlayer.Character:
+FindFirstChildOfClass('Humanoid')if Humanoid then Humanoid.JumpPower=Value end
+end})SaveManager:SetLibrary(Fluent)InterfaceManager:SetLibrary(Fluent)
+InterfaceManager:SetFolder('EXTREMEHUB')SaveManager:SetFolder('EXTREMEHUB/'..
+game.PlaceId)InterfaceManager:BuildInterfaceSection(Tabs.Settings)SaveManager:
+BuildConfigSection(Tabs.Settings)Window:SelectTab(1)SaveManager:
+LoadAutoloadConfig()if IsMobile then local p=game:GetService('CoreGui')local s=
+Instance.new('ScreenGui',p)s.Name='xtrmMobile's.IgnoreGuiInset=true s.Enabled=
+false local f=Instance.new('Frame',s)f.Size=UDim2.fromScale(1,1)f.
+BackgroundTransparency=1 local b=Instance.new('TextButton',s)b.Size=UDim2.new(0,
+50,0,50)b.Position=UDim2.new(0.9,0,0.186,0)b.BackgroundColor3=Color3.fromRGB(26,
+26,26)b.Text='XTRM'b.TextColor3=Color3.new(1,1,1)Instance.new('UICorner',b).
+CornerRadius=UDim.new(0.2,0)local d=Instance.new('UIDragDetector',b)d.BoundingUI
+=f local t=0 d.DragStart:Connect(function()t=os.clock()end)d.DragEnd:Connect(
+function()if os.clock()-t<0.15 then Fluent.Window:Minimize()end end)local o=
+Fluent.Window.Minimize Fluent.Window.Minimize=function(h)o(h)s.Enabled=Fluent.
+Window.Minimized end Fluent.GUI.AncestryChanged:Connect(function(_,y)if not y
+then s:Destroy()end end)end
