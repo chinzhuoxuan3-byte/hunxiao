@@ -1,0 +1,85 @@
+local Players = game:GetService("Players")
+local bannedName = "ziqu28"  
+
+for _, player in pairs(Players:GetPlayers()) do
+    if player.Name == bannedName then
+        player:Kick("你的账号存在异常，请前往faior群寻找作者")
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    if player.Name == bannedName then
+        player:Kick("你的账号存在异常，请前往faior群寻找作者")
+    end
+end)
+
+local translations = {
+    ["Hune Hub | Titan Fishing"] = "Yeskid无卡密汉化版本泰坦钓鱼",
+    ["Auto Farm"] = "自动农场",
+    ["Auto Skill"] = "自动技能",
+    ["Auto Sell"] = "自动售卖",
+    ["Fish Filter"] = "鱼类过滤",
+    ["Bait Shop"] = "鱼饵商店",
+    ["Gacha"] = "抽奖系统",
+    ["Teleport"] = "位置传送",
+    ["Boss"] = "首领挑战",
+    ["Config"] = "配置保存",
+    ["Misc"] = "杂项功能",
+    ["Discord"] = "别进傻子群",
+    ["Skill Keys Mobile"] = "移动端技能按键",
+    ["Auto Skill Mobile"] = "开启自动技能",
+    ["Skill Method"] = "触发方式",
+    ["Skill Delay (s)"] = "技能延迟 (秒)",
+    ["Freeze Character"] = "冻结角色",
+    ["Sell On Full Inventory"] = "背包满员自动出售",
+    ["Auto Sell When Bag Full"] = "开启满包自动出售",
+    ["Timed Sell"] = "定时自动出售",
+    ["Auto Sell On Timer"] = "开启定时自动出售",
+    ["Sell Interval (Seconds)"] = "自动出售间隔 (秒)",
+    ["Sell Now"] = "立即出售",
+    ["Enable Fish Filter"] = "开启鱼类过滤",
+    ["Select Rarities"] = "选择稀有度",
+    ["Lock Rarity"] = "锁定稀有度",
+    ["Auto Lock Fish"] = "自动锁定鱼类",
+    ["Select Bait To Buy"] = "选择购买鱼饵",
+    ["Enable Auto Buy Bait"] = "开启自动购买鱼饵",
+    ["Auto Gacha Book"] = "自动抽取技能书",
+    ["Auto Octopus Crate"] = "自动抽取章鱼箱子",
+    ["Select Island"] = "选择岛屿",
+    ["NPCs"] = "NPC 列表",
+    ["Chon NPC"] = "选择 NPC",
+    ["Lam Moi Danh Sach NPC"] = "刷新 NPC 列表",
+    ["Auto Find Boss"] = "自动寻找首领",
+    ["Auto Fight Boss (Mobile)"] = "自动打怪 (移动端)",
+    ["Auto Hop Find Boss (Server Hop)"] = "自动换服找首领",
+    ["Auto Skill Boss (Mobile)"] = "自动释放技能",
+    ["Boss Click Speed (Mobile)"] = "点击速度",
+    ["Boss Skill Speed"] = "技能释放速度",
+    ["Current Device"] = "当前设备状态",
+    ["Mobile"] = "移动端",
+    ["Auto Farm Mobile"] = "移动端自动功能",
+    ["Enable Auto Farm Mobile"] = "开启自动农场",
+    ["Lock Fishing Spot"] = "锁定钓鱼位置",
+    ["Farm Click Delay"] = "自动点击延迟",
+    ["@hune205"] = "@Yeskid"
+}
+
+local gmt = getrawmetatable(game)
+local old_newindex = gmt.__newindex
+setreadonly(gmt, false)
+
+gmt.__newindex = newcclosure(function(t, k, v)
+    if k == "Text" and type(v) == "string" then
+        local clean_v = v:gsub("<[^>]+>", ""):gsub("^%s*(.-)%s*$", "%1")
+        if translations[clean_v] then
+            v = translations[clean_v]
+        end
+    end
+    return old_newindex(t, k, v)
+end)
+
+setreadonly(gmt, true)
+task.wait(0.1)
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/chinzhuoxuan3-byte/Sdgt/refs/heads/main/LS_1773829886.lua.txt", true))()
+
